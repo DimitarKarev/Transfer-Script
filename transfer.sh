@@ -53,6 +53,10 @@ elif [ -f configuration.php ]; then
 elif [ -f config/settings.inc.php ]; then
 
   application="PrestaShop1.6"
+
+elif [ -f app/config/parameters.php ]; then
+
+  application="PrestaShop1.7"
   
 else
   
@@ -431,6 +435,35 @@ elif [ $application = "PrestaShop1.6" ]; then
 
   sed -e "${dbPassLine}d" -i config/settings.inc.php
   sed -i "${dbPassLine}i\\$defaultDbLine" config/settings.inc.php
+
+#VII PRESTASHOP 1.7 SPECIFIC STEPS:
+
+elif [ $application = "PrestaShop1.7" ]; then
+
+#10.GET OLD DATABASE DETAILS:
+
+  oldDbName=$(cat app/config/parameters.php | grep -m 1 'database_name' | cut -d \' -f 4)
+  oldDbUser=$(cat app/config/parameters.php | grep -m 1 'database_user' | cut -d \' -f 4)
+  oldDbPass=$(cat app/config/parameters.php | grep -m 1 'database_password' | cut -d \' -f 4)
+  oldDbHost=$(cat app/config/parameters.php | grep -m 1 'database_host' | cut -d \' -f 4)
+
+#11.UPDATE DATABASE DETAILS:
+
+#11.1.MAKE A COPY OF ORIGINAL CONFIG FILE:
+
+  cp app/config/parameters.php app/config/parameters.php.bk
+
+#11.2.REPLACE DATABASE NAME USER AND HOSTNAME:
+
+  sed -i "s/$oldDbName\b/$dbName/g;s/$oldDbUser\b/$dbName/g;s/$oldDbHost/localhost/g" app/config/parameters.php
+
+#11.3.DELETE DB_PASS LINE AND REPLACE IT WITH PREDEFIEND.
+
+  dbPassLine=$(grep -n 'database_password' app/config/parameters.php | cut -f1 -d:)
+  defaultDbLine="    'database_password' => '4eYJEq3KyZr5r1',"
+
+  sed -e "${dbPassLine}d" -i app/config/parameters.php
+  sed -i "${dbPassLine}i\\$defaultDbLine" app/config/parameters.php
 
 else
 
