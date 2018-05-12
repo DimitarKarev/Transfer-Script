@@ -11,7 +11,52 @@ CYAN_COLOR='\e[1;36m%s\e[0m\n'
 #2.INPUT DOMAIN NAME:
 
 printf "$GREEN_COLOR" 'TYPE THE DOMAIN NAME AND WATCH THE MAGIC HAPPEN!'
-read -e -p $'\e[36mDomain/Subdomain:\e[0m ' input_domain;
+read -e -r -p $'\e[36mDomain/Subdomain:\e[0m ' input_domain;
+
+
+#4.GET DOMAIN DOCUMENT ROOT:
+
+touch temp.txt
+
+sub_folder=$(echo "${input_domain}" | cut -d '/' -f 2-)
+
+
+if [ "$sub_folder" = "$input_domain"  ]; then
+  sub_folder=""
+  domain_name=$input_domain
+  doc_root=$(uapi DomainInfo single_domain_data domain="$domain_name" | grep "documentroot:" | cut -d ' ' -f 6)
+
+else
+
+  domain_name=$(echo "$input_domain" | cut -d '/' -f 1)
+  doc_root=$(uapi DomainInfo single_domain_data domain="$domain_name" | grep "documentroot:" | cut -d ' ' -f 6)
+  doc_root=${doc_root}/${sub_folder}
+
+fi
+
+#4.1.CHECK IF DOMAIN EXISTS AND ASK FOR INPUT UNTIL EXISTING DOMAIN IS PROVIDED:
+
+while [ -z "$doc_root" ]; do
+
+  printf "$RED_COLOR" 'INVALID DOMAIN! TYPE THE DOMAIN AGAIN:'
+  read -e -r -p $'\e[36mDomain/Subdomain:\e[0m ' input_domain;
+
+  sub_folder=$(echo "$input_domain" | cut -d '/' -f 2-)
+
+
+  if [ "$sub_folder" = "$input_domain"  ]; then
+    sub_folder=""
+    domain_name=$input_domain
+    doc_root=$(uapi DomainInfo single_domain_data domain="$domain_name" | grep 'documentroot:' | cut -d ' ' -f 6)
+
+  else
+
+    doc_root=$(uapi DomainInfo single_domain_data domain="$domain_name" | grep 'documentroot:' | cut -d ' ' -f 6)
+    doc_root=${doc_root}/${sub_folder}
+
+  fi
+
+done
 
 #3.CHECK APPLICATION:
 
@@ -43,56 +88,7 @@ elif [ -f app/config/parameters.php ]; then
 
   application='PrestaShop1.7'
 
-else
-
-  application='Other'
-
 fi
-
-#4.GET DOMAIN DOCUMENT ROOT:
-
-touch temp.txt
-
-sub_folder=$(echo "${input_domain}" | cut -d \/ -f 2-)
-
-
-if [ "$sub_folder" = "$input_domain"  ]; then
-  sub_folder=""
-  domain_name=$input_domain
-  doc_root=$(uapi DomainInfo single_domain_data domain="$domain_name" | grep "documentroot:" | cut -d ' ' -f 6)
-
-else
-
-  domain_name=$(echo "$input_domain" | cut -d \/ -f 1)
-  doc_root=$(uapi DomainInfo single_domain_data domain="$domain_name" | grep "documentroot:" | cut -d ' ' -f 6)
-  doc_root=${doc_root}/${sub_folder}
-
-fi
-
-#4.1.CHECK IF DOMAIN EXISTS AND ASK FOR INPUT UNTIL EXISTING DOMAIN IS PROVIDED:
-
-while [ -z "$doc_root" ]; do
-
-  printf "$RED_COLOR" 'INVALID DOMAIN! TYPE THE DOMAIN AGAIN:'
-  read -e -p $'\e[36mDomain/Subdomain:\e[0m ' input_domain;
-
-  sub_folder=$(echo "$input_domain" | cut -d \/ -f 2-)
-
-
-  if [ "$sub_folder" = "$input_domain"  ]; then
-    sub_folder=""
-    domain_name=$input_domain
-    doc_root=$(uapi DomainInfo single_domain_data domain="$domain_name" | grep 'documentroot:' | cut -d ' ' -f 6)
-
-  else
-
-    domain_name=$(echo "$input_domain" | cut -d \/ -f 1)
-    doc_root=$(uapi DomainInfo single_domain_data domain="$domain_name" | grep 'documentroot:' | cut -d ' ' -f 6)
-    doc_root=${doc_root}/${sub_folder}
-
-  fi
-
-done
 
 #5.GET CPANEL USERNAME AND CUT IT TO 8 CHARS IF LONGER:
 
@@ -161,10 +157,9 @@ if [ "$application" = 'WordPress' ]; then
 
 #10.GET OLD DATABASE DETAILS:
 
-  oldDbName=$(cat wp-config.php | grep -m 1 DB_NAME | cut -d \' -f 4)
-  oldDbUser=$(cat wp-config.php | grep -m 1 DB_USER | cut -d \' -f 4)
-  oldDbPass=$(cat wp-config.php | grep -m 1 DB_PASSWORD | cut -d \' -f 4)
-  oldDbHost=$(cat wp-config.php | grep -m 1 DB_HOST | cut -d \' -f 4)
+  oldDbName=$( < wp-config.php grep -m 1 DB_NAME | cut -d \' -f 4 )
+  oldDbUser=$( < wp-config.php grep -m 1 DB_USER | cut -d \' -f 4 )
+  oldDbHost=$( < wp-config.php grep -m 1 DB_HOST | cut -d \' -f 4 )
 
 #11.UPDATE DATABASE DETAILS:
 
@@ -174,7 +169,7 @@ if [ "$application" = 'WordPress' ]; then
 
 #11.2.REPLACE DATABASE NAME USER AND HOSTNAME:
 
-  sed -i "s/$oldDbName\b/$db_name/g;s/$oldDbUser\b/$db_name/g;s/$oldDbHost/localhost/g" wp-config.php
+  sed -i "s/$oldDbName\\b/$db_name/g;s/$oldDbUser\\b/$db_name/g;s/$oldDbHost/localhost/g" wp-config.php
 
 #11.3.DELETE DB_PASS LINE AND REPLACE IT WITH PREDEFIEND.
 
@@ -187,8 +182,8 @@ if [ "$application" = 'WordPress' ]; then
 
 #FIX PATHS IN wp-config.php, wordfence-waf.php, .user.ini AND .htaccess FILES:
 
-  oldDocRoot=$(cat wp-config.php | grep -m 1 WPCACHEHOME | sed 's/wp-content.*$/wp-content/' | rev | cut -d"/" -f2- | rev | cut -d \' -f 4 | sed 's_/_\\/_g')
-  newDocRoot=$(echo "$doc_root" | sed 's_/_\\/_g')
+  oldDocRoot=$( < wp-config.php grep -m 1 WPCACHEHOME | sed 's/wp-content.*$/wp-content/' | rev | cut -d '/' -f2- | rev | cut -d \' -f 4 | sed 's_/_\\/_g')
+  newDocRoot=${doc_root//\//\\/}
 
   if [ ! -z "$oldDocRoot" ]; then
 
@@ -199,7 +194,7 @@ if [ "$application" = 'WordPress' ]; then
   if [ -f wordfence-waf.php ]; then
     if [ -z "$oldDocRoot" ]; then
 
-      oldDocRoot=$(cat wordfence-waf.php | grep -m 1 define | sed 's/wp-content.*$/wp-content/' | rev | cut -d"/" -f2- | rev | cut -d \' -f 2 | sed 's_/_\\/_g')
+      oldDocRoot=$( < wordfence-waf.php grep -m 1 define | sed 's/wp-content.*$/wp-content/' | rev | cut -d / -f2- | rev | cut -d \' -f 2 | sed 's_/_\\/_g' )
 
     fi
 
@@ -210,7 +205,7 @@ if [ "$application" = 'WordPress' ]; then
   if [ -f .user.ini ]; then
     if [ -z "$oldDocRoot" ]; then
 
-      oldDocRoot=$(cat .user.ini | grep -m 1 auto_prepend_file | rev | cut  -d \/ -f 2- | rev | cut -d \' -f 2 | sed 's_/_\\/_g')
+      oldDocRoot=$( < .user.ini grep -m 1 auto_prepend_file | rev | cut  -d '/' -f 2- | rev | cut -d \' -f 2 | sed 's_/_\\/_g' )
 
     fi
 
@@ -225,7 +220,7 @@ if [ "$application" = 'WordPress' ]; then
 
     cp .htaccess .htaccess.bk
 
-    oldPath=$(cat .htaccess | grep -m 1 RewriteBase | cut -d ' ' -f 2 | sed 's_/_\\/_g')
+    oldPath=$( < .htaccess grep -m 1 RewriteBase | cut -d ' ' -f 2 | sed 's_/_\\/_g' )
 
     if [ -z $sub_folder ]; then
 
@@ -238,7 +233,7 @@ if [ "$application" = 'WordPress' ]; then
     fi
 
     sed -i "s/RewriteBase $oldPath/RewriteBase $newPath/" .htaccess
-    sed -i "s/RewriteRule \. $oldPath/RewriteRule \. $newPath/" .htaccess
+    sed -i "s/RewriteRule \\. $oldPath/RewriteRule \\. $newPath/" .htaccess
 
     if [ ! -z "$oldDocRoot" ]; then
 
@@ -253,10 +248,9 @@ elif [ "$application" = 'OpenCart' ]; then
 
 #10.GET OLD DATABASE DETAILS:
 
-  oldDbName=$(cat config.php | grep -m 1 DB_DATABASE | cut -d \' -f 4)
-  oldDbUser=$(cat config.php | grep -m 1 DB_USERNAME | cut -d \' -f 4)
-  oldDbPass=$(cat config.php | grep -m 1 DB_PASSWORD | cut -d \' -f 4)
-  oldDbHost=$(cat config.php | grep -m 1 DB_HOSTNAME | cut -d \' -f 4)
+  oldDbName=$( < config.php grep -m 1 DB_DATABASE | cut -d \' -f 4 )
+  oldDbUser=$( < config.php grep -m 1 DB_USERNAME | cut -d \' -f 4 )
+  oldDbHost=$( < config.php grep -m 1 DB_HOSTNAME | cut -d \' -f 4 )
 
 #11.UPDATE DATABASE DETAILS:
 
@@ -267,9 +261,8 @@ elif [ "$application" = 'OpenCart' ]; then
 
 #11.2.REPLACE DATABASE NAME USER AND HOSTNAME:
 
-  sed -i "s/$oldDbName\b/$db_name/g;s/$oldDbUser\b/$db_name/g;s/$oldDbHost/localhost/g" config.php
-  sed -i "s/$oldDbName\b/$db_name/g;s/$oldDbUser\b/$db_name/g;s/$oldDbHost/localhost/g" admin/config.php
-
+  sed -i "s/$oldDbName\\b/$db_name/g;s/$oldDbUser\\b/$db_name/g;s/$oldDbHost/localhost/g" config.php admin/config.php
+  
 #11.3.DELETE DB_PASS LINE AND REPLACE IT WITH PREDEFIEND IN CONFIG AND ADMIN/CONFIG FILES.
 
   defaultDbLine="define('DB_PASSWORD', '4eYJEq3KyZr5r1');"
@@ -286,8 +279,8 @@ elif [ "$application" = 'OpenCart' ]; then
 
 #11.4.GET OLD DIRECTORY PATH:
 
-  oldDocRoot=$(cat config.php | grep -m 1 DIR_APPLICATION | cut -d \' -f 4 | rev | cut -d \/ -f 3- | rev | sed 's_/_\\/_g')
-  newDocRoot=$(echo "$doc_root" | sed 's_/_\\/_g')
+  oldDocRoot=$( < config.php grep -m 1 DIR_APPLICATION | cut -d \' -f 4 | rev | cut -d '/' -f 3- | rev | sed 's_/_\\/_g' )
+  newDocRoot=${doc_root//\//\\/}
 
 #11.5.REPLACE DIRECTORY PATH IN CONFIG FILES:
 
@@ -300,10 +293,9 @@ elif [ "$application" = "Magento1" ]; then
 
 #10.GET OLD DATABASE DETAILS:
 
-  oldDbName=$(cat app/etc/local.xml | grep -m 1 dbname | cut -d \[ -f 3 | cut -d \] -f 1)
-  oldDbUser=$(cat app/etc/local.xml | grep -m 1 username | cut -d \[ -f 3 | cut -d \] -f 1)
-  oldDbPass=$(cat app/etc/local.xml | grep -m 1 password | cut -d \[ -f 3 | cut -d \] -f 1)
-  oldDbHost=$(cat app/etc/local.xml | grep -m 1 host | cut -d \[ -f 3 | cut -d \] -f 1)
+  oldDbName=$( < app/etc/local.xml grep -m 1 dbname | cut -d \[ -f 3 | cut -d \] -f 1 )
+  oldDbUser=$( < app/etc/local.xml grep -m 1 username | cut -d \[ -f 3 | cut -d \] -f 1 )
+  oldDbHost=$( < app/etc/local.xml grep -m 1 host | cut -d \[ -f 3 | cut -d \] -f 1 )
 
 #11.UPDATE DATABASE DETAILS:
 
@@ -313,7 +305,7 @@ elif [ "$application" = "Magento1" ]; then
 
 #11.2.REPLACE DATABASE NAME USER AND HOSTNAME:
 
-  sed -i "s/$oldDbName\b/$db_name/g;s/$oldDbUser\b/$db_name/g;s/$oldDbHost/localhost/g" app/etc/local.xml
+  sed -i "s/$oldDbName\\b/$db_name/g;s/$oldDbUser\\b/$db_name/g;s/$oldDbHost/localhost/g" app/etc/local.xml
 
 #11.3.DELETE DB_PASS LINE AND REPLACE IT WITH PREDEFIEND.
 
@@ -330,10 +322,9 @@ elif [ "$application" = 'Magento2' ]; then
 
 #10.GET OLD DATABASE DETAILS:
 
-  oldDbName=$(cat app/etc/env.php | grep -m 1 dbname | cut -d \' -f 4)
-  oldDbUser=$(cat app/etc/env.php | grep -m 1 username | cut -d \' -f 4)
-  oldDbPass=$(cat app/etc/env.php | grep -m 1 password | cut -d \' -f 4)
-  oldDbHost=$(cat app/etc/env.php | grep -m 1 host | cut -d \' -f 4)
+  oldDbName=$( < app/etc/env.php grep -m 1 dbname | cut -d \' -f 4 )
+  oldDbUser=$( < app/etc/env.php grep -m 1 username | cut -d \' -f 4 )
+  oldDbHost=$( < app/etc/env.php grep -m 1 host | cut -d \' -f 4 )
 
 #11.UPDATE DATABASE DETAILS:
 
@@ -343,7 +334,7 @@ elif [ "$application" = 'Magento2' ]; then
 
 #11.2.REPLACE DATABASE NAME USER AND HOSTNAME:
 
-  sed -i "s/$oldDbName\b/$db_name/g;s/$oldDbUser\b/$db_name/g;s/$oldDbHost/localhost/g" app/etc/env.php
+  sed -i "s/$oldDbName\\b/$db_name/g;s/$oldDbUser\\b/$db_name/g;s/$oldDbHost/localhost/g" app/etc/env.php
 
 #11.3.DELETE DB_PASS LINE AND REPLACE IT WITH PREDEFIEND.
 
@@ -360,10 +351,9 @@ elif [ $application = "Joomla" ]; then
 
 #10.GET OLD DATABASE DETAILS:
 
-  oldDbName=$(cat configuration.php | grep -m 1 "public \$db =" | cut -d \' -f 2)
-  oldDbUser=$(cat configuration.php | grep -m 1 "public \$user =" | cut -d \' -f 2)
-  oldDbPass=$(cat configuration.php | grep -m 1 "public \$password" | cut -d \' -f 2)
-  oldDbHost=$(cat configuration.php | grep -m 1 "public \$host =" | cut -d \' -f 2)
+  oldDbName=$( < configuration.php grep -m 1 "public \$db =" | cut -d \' -f 2 )
+  oldDbUser=$( < configuration.php grep -m 1 "public \$user =" | cut -d \' -f 2 )
+  oldDbHost=$( < configuration.php grep -m 1 "public \$host =" | cut -d \' -f 2 )
 
 #11.UPDATE DATABASE DETAILS:
 
@@ -373,7 +363,7 @@ elif [ $application = "Joomla" ]; then
 
 #11.2.REPLACE DATABASE NAME USER AND HOSTNAME:
 
-  sed -i "s/$oldDbName\b/$db_name/g;s/$oldDbUser\b/$db_name/g;s/$oldDbHost/localhost/g" configuration.php
+  sed -i "s/$oldDbName\\b/$db_name/g;s/$oldDbUser\\b/$db_name/g;s/$oldDbHost/localhost/g" configuration.php
 
 #11.3.DELETE DB_PASS LINE AND REPLACE IT WITH PREDEFIEND.
 
@@ -385,8 +375,8 @@ elif [ $application = "Joomla" ]; then
 
 #11.4.GET OLD DIRECTORY PATH:
 
-  oldDocRoot=$(cat configuration.php | grep "public \$log_path =" | cut -d \' -f 2 | rev | cut -d \/ -f 3- | rev | sed 's_/_\\/_g')
-  newDocRoot=$(echo "$doc_root" | sed 's_/_\\/_g')
+  oldDocRoot=$( < configuration.php grep "public \$log_path =" | cut -d \' -f 2 | rev | cut -d '/' -f 3- | rev | sed 's_/_\\/_g' )
+  newDocRoot=${doc_root//\//\\/}
 
  #VI PRESTASHOP 1.6 SPECIFIC STEPS:
 
@@ -398,10 +388,9 @@ elif [ $application = 'PrestaShop1.6' ]; then
 
 #10.GET OLD DATABASE DETAILS:
 
-  oldDbName=$(cat config/settings.inc.php | grep -m 1 "_DB_NAME_" | cut -d \' -f 4)
-  oldDbUser=$(cat config/settings.inc.php | grep -m 1 "_DB_USER_" | cut -d \' -f 4)
-  oldDbPass=$(cat config/settings.inc.php | grep -m 1 "_DB_PASSWD_" | cut -d \' -f 4)
-  oldDbHost=$(cat config/settings.inc.php | grep -m 1 "_DB_SERVER_" | cut -d \' -f 4)
+  oldDbName=$( < config/settings.inc.php grep -m 1 "_DB_NAME_" | cut -d \' -f 4 )
+  oldDbUser=$( < config/settings.inc.php grep -m 1 "_DB_USER_" | cut -d \' -f 4 )
+  oldDbHost=$( < config/settings.inc.php grep -m 1 "_DB_SERVER_" | cut -d \' -f 4 )
 
 #11.UPDATE DATABASE DETAILS:
 
@@ -411,7 +400,7 @@ elif [ $application = 'PrestaShop1.6' ]; then
 
 #11.2.REPLACE DATABASE NAME USER AND HOSTNAME:
 
-  sed -i "s/$oldDbName\b/$db_name/g;s/$oldDbUser\b/$db_name/g;s/$oldDbHost/localhost/g" config/settings.inc.php
+  sed -i "s/$oldDbName\\b/$db_name/g;s/$oldDbUser\\b/$db_name/g;s/$oldDbHost/localhost/g" config/settings.inc.php
 
 #11.3.DELETE DB_PASS LINE AND REPLACE IT WITH PREDEFIEND.
 
@@ -427,10 +416,9 @@ elif [ $application = 'PrestaShop1.7' ]; then
 
 #10.GET OLD DATABASE DETAILS:
 
-  oldDbName=$(cat app/config/parameters.php | grep -m 1 'database_name' | cut -d \' -f 4)
-  oldDbUser=$(cat app/config/parameters.php | grep -m 1 'database_user' | cut -d \' -f 4)
-  oldDbPass=$(cat app/config/parameters.php | grep -m 1 'database_password' | cut -d \' -f 4)
-  oldDbHost=$(cat app/config/parameters.php | grep -m 1 'database_host' | cut -d \' -f 4)
+  oldDbName=$( < app/config/parameters.php grep -m 1 'database_name' | cut -d \' -f 4 )
+  oldDbUser=$( < app/config/parameters.php grep -m 1 'database_user' | cut -d \' -f 4 )
+  oldDbHost=$( < app/config/parameters.php grep -m 1 'database_host' | cut -d \' -f 4 )
 
 #11.UPDATE DATABASE DETAILS:
 
@@ -440,7 +428,7 @@ elif [ $application = 'PrestaShop1.7' ]; then
 
 #11.2.REPLACE DATABASE NAME USER AND HOSTNAME:
 
-  sed -i "s/$oldDbName\b/$db_name/g;s/$oldDbUser\b/$db_name/g;s/$oldDbHost/localhost/g" app/config/parameters.php
+  sed -i "s/$oldDbName\\b/$db_name/g;s/$oldDbUser\\b/$db_name/g;s/$oldDbHost/localhost/g" app/config/parameters.php
 
 #11.3.DELETE DB_PASS LINE AND REPLACE IT WITH PREDEFIEND.
 
@@ -483,14 +471,14 @@ else
   cat temp.txt
 
   printf "$RED_COLOR" 'MORE THAN ONE SQL FILE FOUND!'
-  read -e -p $'\e[36mTYPE THE NAME OF THE FILE TO IMPORT:\e[0m ' dbDump;
+  read -e -r -p $'\e[36mTYPE THE NAME OF THE FILE TO IMPORT:\e[0m ' dbDump;
 
 #12.1.CHECK IF SQL FILE EXISTS AND ASK FOR INPUT UNTIL EXISTING SQL FILE IS PROVIDED:
 
   while [ ! -f "$dbDump" ]; do
 
     printf "$RED_COLOR" 'INVALID SQL FILE!'
-    read -e -p $'\e[36mTYPE THE NAME OF THE FILE AGAIN:\e[0m ' dbDump;
+    read -e -r -p $'\e[36mTYPE THE NAME OF THE FILE AGAIN:\e[0m ' dbDump;
 
   done
 
@@ -501,7 +489,7 @@ fi
 if [ "$numberOfLines" != 0 ]; then
   if grep -q 'CREATE DATABASE' "$dbDump"; then
 
-    line=$(grep -nm1 'CREATE DATABASE' "$dbDump" | cut -d \: -f 1)
+    line=$(grep -nm1 'CREATE DATABASE' "$dbDump" | cut -d '\:' -f 1)
     line2=$((line+1))
     sed -i.bk -e "${line},${line2}d" "$dbDump"
   fi
@@ -538,7 +526,7 @@ fi
 
 printf "$YELLOW_COLOR" 'FIXING PERMISSIONS.'
 
-find -type d -exec chmod 755 {} \; && find -type f -exec chmod 644 {} \;
+find . -type d -exec chmod 755 {} \; && find . -type f -exec chmod 644 {} \;
 
 if [ -f bin/magento ]; then
 
@@ -564,7 +552,7 @@ if [ "$currentPath" != "$doc_root" ]; then
 
   printf "$GREEN_COLOR" "FILES MOVED TO $doc_root"
 
-  cd "$doc_root"
+  cd "$doc_root" || exit
 
 fi
 
@@ -576,7 +564,7 @@ fi
 
 if [ $application = 'WordPress' ]; then
 
-  tablePrefix=$(cat wp-config.php | grep -m 1 table_prefix | cut -d \' -f 2 )
+  tablePrefix=$( < wp-config.php grep -m 1 table_prefix | cut -d \' -f 2 )
   tablePrefixCLI=$(wp db prefix)
   wpCliWorking="y"
 
@@ -591,15 +579,15 @@ replaceDb="n"
 wwwInputDomain=www."$input_domain"
 
 #17.2.CHECK IF SQL FILE WAS FOUND AND IF DB WAS SUCCESSFULLY IMPORTED:
-if [ "$numberOfLines" != 0 ] && [ "$ImportErrors" -eq 0 ] && [ $application = 'WordPress' ] && [ $wpCliWorking = "y" ]; then
+if [ "$numberOfLines" != 0 ] && [ "$ImportErrors" -eq 0 ] && [ $application = 'WordPress' ] && [ $wpCliWorking = 'y' ]; then
 
-   oldDomain=$(wp option get siteurl | cut -d \/ -f 3-)
+   oldDomain=$(wp option get siteurl | cut -d '/' -f 3-)
 
 #17.3.CHECK IF INPUT DOMAIN MATCHES THE DOMAIN IN THE DATABASE:
   if [ "$input_domain" != "$oldDomain" ] && [ "$wwwInputDomain" != "$oldDomain" ] && [ ! -z "$oldDomain" ]; then
 
      printf "$RED_COLOR" "OLD DOMAIN: $oldDomain IS DIFFERENT FROM CURRENT DOMAIN: $input_domain!"
-     read -e -p $'\e[36mWould you like to perform search and replace? (y/n):\e[0m ' replaceDb;
+     read -e -r -p $'\e[36mWould you like to perform search and replace? (y/n):\e[0m ' replaceDb;
 
     if [ "$replaceDb" = 'y' ]; then
 
@@ -634,26 +622,26 @@ wwwInputDomain=www."$input_domain"
 
 if [ "$numberOfLines" != 0 ] && [ "$ImportErrors" -eq 0 ] && [ $application = 'OpenCart' ]; then
 
-oldDomain=$(cat config.php | grep HTTP_SERVER | cut -d \/ -f 3- | rev | cut -d \/ -f 2- | rev)
+oldDomain=$( < config.php grep HTTP_SERVER | cut -d '/' -f 3- | rev | cut -d '/' -f 2- | rev )
 
   if [ "$input_domain" != "$oldDomain" ] && [ "$wwwInputDomain" != "$oldDomain" ] && [ ! -z "$oldDomain" ]; then
 
 #17.3.CHECK IF INPUT DOMAIN MATCHES THE DOMAIN IN THE CONFIG FILE:
 
 printf "$RED_COLOR" "OLD DOMAIN: $oldDomain IS DIFFERENT FROM CURRENT DOMAIN: $input_domain!"
-     read -e -p $'\e[36mWould you like for the Domain value in the config files to be replaced? (y/n):\e[0m ' replaceDb;
+     read -e -r -p $'\e[36mWould you like for the Domain value in the config files to be replaced? (y/n):\e[0m ' replaceDb;
 
     if [ "$replaceDb" = "y" ]; then
 
-	  oldURL=$(echo "$oldDomain" | sed 's_/_\\/_g')
-	  newURl=$(echo "$input_domain" | sed 's_/_\\/_g')
+	  oldURL=${oldDomain//\//\\/}
+	  newURl=${input_domain//\//\\/}
 
 	  sed -i "s/$oldURL/$newURl/g" config.php
 	  sed -i "s/$oldURL/$newURl/g" admin/config.php
 
-	  replacedURL=$(cat config.php | grep HTTP_SERVER | cut -d \/ -f 3- | rev | cut -d \/ -f 2- | rev)
+	  replacedURL=$( < config.php grep HTTP_SERVER | cut -d '/' -f 3- | rev | cut -d '/' -f 2- | rev )
 
-	  if [ "replacedURL" = "$input_domain" ]; then
+	  if [ "$replacedURL" = "$input_domain" ]; then
 
 	    printf "$GREEN_COLOR" 'DOMAIN VALUE SUCCESSFULLY REPLACED.'
 
@@ -710,8 +698,8 @@ if [ -f propagation.txt ] && [ -f template.txt ]; then
   printf "$CYAN_COLOR" 'LINK TO propagation.txt FILE:'
   printf "$PURPLE_COLOR" "$input_domain/propagation.txt"
 
-  replaceOldDomain=$(echo "$oldDomain" | sed 's_/_\\/_g')
-  replaceInputDomain=$(echo "$input_domain" | sed 's_/_\\/_g')
+  replaceOldDomain=${oldDomain//\//\\/}
+  replaceInputDomain=${input_domain//\//\\/}
   sed -i "s/OLDURL/$replaceOldDomain/g;s/NEWURL/$replaceInputDomain/g;s/DOMAIN/$domain_name/g;s/HOSTNAME/$hostname/g;s/IP_ADDRESS/$ip_address/g" template.txt
 
   printf "$CYAN_COLOR" 'LINK TO TEMPLATE:'
@@ -723,7 +711,7 @@ printf "$GREEN_COLOR" 'THE DEPLOYMENT OF THE WEBSITE HAS BEEN COMPLETED.'
 
 #21.DELETE TEMPORARY FILES:
 
-read -e -p $'\e[36mDELETE SCRIPT AND TEMPORARY FILES?(y/n):\e[0m ' delete;
+read -e -r -p $'\e[36mDELETE SCRIPT AND TEMPORARY FILES?(y/n):\e[0m ' delete;
 
 if [ "$delete" = 'y' ]; then
 
