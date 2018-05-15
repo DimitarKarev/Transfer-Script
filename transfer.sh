@@ -13,52 +13,86 @@ CYAN_COLOR='\e[1;36m%s\e[0m\n'
 printf "$GREEN_COLOR" 'TYPE THE DOMAIN NAME AND WATCH THE MAGIC HAPPEN!'
 read -e -r -p $'\e[36mDomain/Subdomain:\e[0m ' input_domain;
 
+#2.1.CONVERT DOMAIN TO LOWERCASE:
 
-#4.GET DOMAIN DOCUMENT ROOT:
+input_domain="${input_domain,,}"
 
-touch temp.txt
+#2.2.REMOVE ANY '/' AT THE END OF THE INPUT:
 
-sub_folder=$(echo "${input_domain}" | cut -d '/' -f 2-)
+last_char="${input_domain: -1}"
 
+while [ "$last_char" = '/' ]; do
 
-if [ "$sub_folder" = "$input_domain"  ]; then
-  sub_folder=""
+input_domain=${input_domain%?};
+last_char="${input_domain: -1}"
+
+done
+
+#3.GET DOMAIN DOCUMENT ROOT:
+
+sub_folder=$( echo "${input_domain}" | cut -d '/' -s -f 2- )
+
+if [ -z "$sub_folder" ]; then
+
   domain_name=$input_domain
-  doc_root=$(uapi DomainInfo single_domain_data domain="$domain_name" | grep "documentroot:" | cut -d ' ' -f 6)
+  doc_root=$( uapi DomainInfo single_domain_data domain="$domain_name" | grep 'documentroot:' | cut -d ' ' -f 6 )
 
 else
 
-  domain_name=$(echo "$input_domain" | cut -d '/' -f 1)
-  doc_root=$(uapi DomainInfo single_domain_data domain="$domain_name" | grep "documentroot:" | cut -d ' ' -f 6)
-  doc_root=${doc_root}/${sub_folder}
+  domain_name=$( echo "$input_domain" | cut -d '/' -f 1 )
+  doc_root=$( uapi DomainInfo single_domain_data domain="$domain_name" | grep 'documentroot:' | cut -d ' ' -f 6 )
 
+  if [ ! -z "$doc_root" ]; then
+
+    doc_root=${doc_root}/${sub_folder}
+
+  fi
 fi
 
-#4.1.CHECK IF DOMAIN EXISTS AND ASK FOR INPUT UNTIL EXISTING DOMAIN IS PROVIDED:
+#3.1.CHECK IF DOMAIN EXISTS AND ASK FOR INPUT UNTIL EXISTING DOMAIN IS PROVIDED:
 
 while [ -z "$doc_root" ]; do
 
   printf "$RED_COLOR" 'INVALID DOMAIN! TYPE THE DOMAIN AGAIN:'
   read -e -r -p $'\e[36mDomain/Subdomain:\e[0m ' input_domain;
 
-  sub_folder=$(echo "$input_domain" | cut -d '/' -f 2-)
+  #3.1.1.CONVERT INPUT TO LOWERCASE:
 
+  input_domain="${input_domain,,}"
 
-  if [ "$sub_folder" = "$input_domain"  ]; then
-    sub_folder=""
+  #3.1.2.REMOVE ANY '/' AT THE END OF THE INPUT:
+
+  last_char="${input_domain: -1}"
+
+  while [ "$last_char" = '/' ]; do
+
+  input_domain=${input_domain%?};
+  last_char="${input_domain: -1}"
+
+  done
+
+  sub_folder=$( echo "${input_domain}" | cut -d '/' -s -f 2- )
+
+  if [ -z "$sub_folder" ]; then
+
     domain_name=$input_domain
-    doc_root=$(uapi DomainInfo single_domain_data domain="$domain_name" | grep 'documentroot:' | cut -d ' ' -f 6)
+    doc_root=$( uapi DomainInfo single_domain_data domain="$domain_name" | grep 'documentroot:' | cut -d ' ' -f 6 )
 
   else
 
-    doc_root=$(uapi DomainInfo single_domain_data domain="$domain_name" | grep 'documentroot:' | cut -d ' ' -f 6)
-    doc_root=${doc_root}/${sub_folder}
+    domain_name=$( echo "$input_domain" | cut -d '/' -f 1 )
+    doc_root=$( uapi DomainInfo single_domain_data domain="$domain_name" | grep 'documentroot:' | cut -d ' ' -f 6 )
 
+    if [ ! -z "$doc_root" ]; then
+
+      doc_root=${doc_root}/${sub_folder}
+
+    fi
   fi
 
 done
 
-#3.CHECK APPLICATION:
+#4.CHECK APPLICATION:
 
 if [ -f wp-config.php ]; then
 
@@ -92,13 +126,13 @@ fi
 
 #5.GET CPANEL USERNAME AND CUT IT TO 8 CHARS IF LONGER:
 
-cpanel_user=$(uapi DomainInfo single_domain_data domain="$domain_name" | grep 'user:' | cut -d ' ' -f 6)
+cpanel_user=$( uapi DomainInfo single_domain_data domain="$domain_name" | grep 'user:' | cut -d ' ' -f 6 )
 
 cpanel_user_length=${#cpanel_user}
 
 if [ "$cpanel_user_length" -ge 8 ]; then
 
-   cpanel_user=$(echo "$cpanel_user" | cut -c 1-8)
+   cpanel_user=$( echo "$cpanel_user" | cut -c 1-8 )
 
 fi
 
@@ -106,7 +140,7 @@ fi
 
 db_prefix_length=2
 
-db_prefix=$(echo "$domain_name" | cut -c 1-$db_prefix_length)
+db_prefix=$( echo "$domain_name" | cut -c 1-$db_prefix_length )
 
 #7.GET DATABASE NAME AND DEFINE DEFAULT DB PASSWORD:
 
@@ -116,20 +150,20 @@ dbPass='4eYJEq3KyZr5r1'
 
 #8.CREATE DATABASE (CHECK IF DATABASE EXISTS AND IF YES CHANGE DATABASE_PREFIX UNTIL NEW DB CAN BE CREATED):
 
-db_nameStatus=$(uapi Mysql create_database name="$db_name" | grep 'status:' | cut -d ' ' -f 4)
+db_nameStatus=$( uapi Mysql create_database name="$db_name" | grep 'status:' | cut -d ' ' -f 4 )
 
 while [ "$db_nameStatus" -eq 0 ]; do
 
   db_prefix_length=$((db_prefix_length+1))
 
-  db_prefix=$(echo "$domain_name" | cut -c 1-$db_prefix_length)
+  db_prefix=$( echo "$domain_name" | cut -c 1-"$db_prefix_length" )
 
 #8.1 REMOVE ALL INSTANCES OF '.' IN DATABASE NAME:
 
   db_name=${cpanel_user}_${db_prefix}
   db_name=${db_name//./}
 
-  db_nameStatus=$(uapi Mysql create_database name="$db_name" | grep 'status:' | cut -d ' ' -f 4)
+  db_nameStatus=$( uapi Mysql create_database name="$db_name" | grep 'status:' | cut -d ' ' -f 4 )
 
 done
 
@@ -137,7 +171,7 @@ printf "$GREEN_COLOR" 'DATABASE CREATED.'
 
 #9.CREATE DATABASE USER, ADD PRIVILIGES AND OUTPUT IF USER IS CREATED SUCCESSFULLY:
 
-dbUserStatus=$(uapi Mysql create_user name="$db_name" password="$dbPass" | grep 'status:' | cut -d ' ' -f 4)
+dbUserStatus=$( uapi Mysql create_user name="$db_name" password="$dbPass" | grep 'status:' | cut -d ' ' -f 4 )
 
 uapi Mysql set_privileges_on_database user="$db_name" database="$db_name" privileges=ALL%20PRIVILEGES > /dev/null 2>&1
 
@@ -173,7 +207,7 @@ if [ "$application" = 'WordPress' ]; then
 
 #11.3.DELETE DB_PASS LINE AND REPLACE IT WITH PREDEFIEND.
 
-  dbPassLine=$(grep -n 'DB_PASSWORD' wp-config.php | cut -f1 -d:)
+  dbPassLine=$( grep -n 'DB_PASSWORD' wp-config.php | cut -f1 -d: )
 
   defaultDbLine="define('DB_PASSWORD', '4eYJEq3KyZr5r1');"
 
@@ -182,7 +216,7 @@ if [ "$application" = 'WordPress' ]; then
 
 #FIX PATHS IN wp-config.php, wordfence-waf.php, .user.ini AND .htaccess FILES:
 
-  oldDocRoot=$( < wp-config.php grep -m 1 WPCACHEHOME | sed 's/wp-content.*$/wp-content/' | rev | cut -d '/' -f2- | rev | cut -d \' -f 4 | sed 's_/_\\/_g')
+  oldDocRoot=$( < wp-config.php grep -m 1 WPCACHEHOME | sed 's/wp-content.*$/wp-content/' | rev | cut -d '/' -f2- | rev | cut -d \' -f 4 | sed 's_/_\\/_g' )
   newDocRoot=${doc_root//\//\\/}
 
   if [ ! -z "$oldDocRoot" ]; then
@@ -194,7 +228,7 @@ if [ "$application" = 'WordPress' ]; then
   if [ -f wordfence-waf.php ]; then
     if [ -z "$oldDocRoot" ]; then
 
-      oldDocRoot=$( < wordfence-waf.php grep -m 1 define | sed 's/wp-content.*$/wp-content/' | rev | cut -d / -f2- | rev | cut -d \' -f 2 | sed 's_/_\\/_g' )
+      oldDocRoot=$( < wordfence-waf.php grep -m 1 define | sed 's/wp-content.*$/wp-content/' | rev | cut -d '/' -f2- | rev | cut -d \' -f 2 | sed 's_/_\\/_g' )
 
     fi
 
@@ -209,11 +243,11 @@ if [ "$application" = 'WordPress' ]; then
 
     fi
 
-	if [ ! -z "$oldDocRoot" ]; then
+	  if [ ! -z "$oldDocRoot" ]; then
 
 	  sed -i "s/$oldDocRoot/$newDocRoot/g" .user.ini
 
-	fi
+	  fi
   fi
 
   if [ -f .htaccess ]; then
@@ -222,13 +256,13 @@ if [ "$application" = 'WordPress' ]; then
 
     oldPath=$( < .htaccess grep -m 1 RewriteBase | cut -d ' ' -f 2 | sed 's_/_\\/_g' )
 
-    if [ -z $sub_folder ]; then
+    if [ -z "$sub_folder" ]; then
 
-      newPath=$(echo / | sed 's_/_\\/_g')
+      newPath=$( echo / | sed 's_/_\\/_g' )
 
     else
 
-     newPath=$(echo /${sub_folder}/ | sed 's_/_\\/_g')
+     newPath=$( echo /"${sub_folder}"/ | sed 's_/_\\/_g' )
 
     fi
 
@@ -262,17 +296,17 @@ elif [ "$application" = 'OpenCart' ]; then
 #11.2.REPLACE DATABASE NAME USER AND HOSTNAME:
 
   sed -i "s/$oldDbName\\b/$db_name/g;s/$oldDbUser\\b/$db_name/g;s/$oldDbHost/localhost/g" config.php admin/config.php
-  
+
 #11.3.DELETE DB_PASS LINE AND REPLACE IT WITH PREDEFIEND IN CONFIG AND ADMIN/CONFIG FILES.
 
   defaultDbLine="define('DB_PASSWORD', '4eYJEq3KyZr5r1');"
 
-  dbPassLine=$(grep -n 'DB_PASSWORD' config.php | cut -f1 -d:)
+  dbPassLine=$( grep -n 'DB_PASSWORD' config.php | cut -f1 -d: )
 
   sed -e "${dbPassLine}d" -i config.php
   sed -i "${dbPassLine}i\\$defaultDbLine" config.php
 
-  dbPassLine=$(grep -n 'DB_PASSWORD' admin/config.php | cut -f1 -d:)
+  dbPassLine=$( grep -n 'DB_PASSWORD' admin/config.php | cut -f1 -d: )
 
   sed -e "${dbPassLine}d" -i admin/config.php
   sed -i "${dbPassLine}i\\$defaultDbLine" admin/config.php
@@ -289,13 +323,13 @@ elif [ "$application" = 'OpenCart' ]; then
 
 # III.MAGENTO 1 SPECIFIC STEPS:
 
-elif [ "$application" = "Magento1" ]; then
+elif [ "$application" = 'Magento1' ]; then
 
 #10.GET OLD DATABASE DETAILS:
 
-  oldDbName=$( < app/etc/local.xml grep -m 1 dbname | cut -d \[ -f 3 | cut -d \] -f 1 )
-  oldDbUser=$( < app/etc/local.xml grep -m 1 username | cut -d \[ -f 3 | cut -d \] -f 1 )
-  oldDbHost=$( < app/etc/local.xml grep -m 1 host | cut -d \[ -f 3 | cut -d \] -f 1 )
+  oldDbName=$( < app/etc/local.xml grep -m 1 dbname | cut -d '[' -f 3 | cut -d ']' -f 1 )
+  oldDbUser=$( < app/etc/local.xml grep -m 1 username | cut -d '[' -f 3 | cut -d ']' -f 1 )
+  oldDbHost=$( < app/etc/local.xml grep -m 1 host | cut -d '[' -f 3 | cut -d ']' -f 1 )
 
 #11.UPDATE DATABASE DETAILS:
 
@@ -309,7 +343,7 @@ elif [ "$application" = "Magento1" ]; then
 
 #11.3.DELETE DB_PASS LINE AND REPLACE IT WITH PREDEFIEND.
 
-  dbPassLine=$(grep -n 'password' app/etc/local.xml | cut -f1 -d:)
+  dbPassLine=$( grep -n 'password' app/etc/local.xml | cut -f1 -d: )
 
   defaultDbLine="                    <password><![CDATA[4eYJEq3KyZr5r1]]></password>"
 
@@ -338,16 +372,29 @@ elif [ "$application" = 'Magento2' ]; then
 
 #11.3.DELETE DB_PASS LINE AND REPLACE IT WITH PREDEFIEND.
 
-  dbPassLine=$(grep -n 'password' app/etc/env.php | cut -f1 -d:)
+  dbPassLine=$( grep -n 'password' app/etc/env.php | cut -f1 -d: )
 
   defaultDbLine="        'password' => '4eYJEq3KyZr5r1',"
 
   sed -e "${dbPassLine}d" -i app/etc/env.php
   sed -i "${dbPassLine}i\\$defaultDbLine" app/etc/env.php
 
+#11.4.ADD CRON JOBS:
+
+  crontab -l > mycrons
+
+  {
+  echo "2,17,32,55 * * * * /usr/local/bin/php ${doc_root}/update/cron.php >> ${doc_root}/var/log/update.cron.log"
+  echo "7,27,40,49 * * * * cd ${doc_root}/bin && ./magento setup:cron:run >> ${doc_root}/var/log/setup.cron.log"
+  echo "13,21,36,56 * * * * cd ${doc_root}/bin && ./magento cron:run | grep -v 'Ran jobs by schedule' >> ${doc_root}/var/log/magento.cron.log"
+  } >> mycrons
+
+crontab mycrons
+rm -rf mycrons
+
 #V JOOMLA SPECIFIC STEPS:
 
-elif [ $application = "Joomla" ]; then
+elif [ "$application" = 'Joomla' ]; then
 
 #10.GET OLD DATABASE DETAILS:
 
@@ -367,7 +414,7 @@ elif [ $application = "Joomla" ]; then
 
 #11.3.DELETE DB_PASS LINE AND REPLACE IT WITH PREDEFIEND.
 
-  dbPassLine=$(grep -n 'password' configuration.php | cut -f1 -d:)
+  dbPassLine=$( grep -n 'password' configuration.php | cut -f1 -d: )
   defaultDbLine="        public \$password = '4eYJEq3KyZr5r1';"
 
   sed -e "${dbPassLine}d" -i configuration.php
@@ -384,7 +431,7 @@ elif [ $application = "Joomla" ]; then
 
   sed -i "s/$oldDocRoot/$newDocRoot/g" configuration.php
 
-elif [ $application = 'PrestaShop1.6' ]; then
+elif [ "$application" = 'PrestaShop1.6' ]; then
 
 #10.GET OLD DATABASE DETAILS:
 
@@ -404,7 +451,7 @@ elif [ $application = 'PrestaShop1.6' ]; then
 
 #11.3.DELETE DB_PASS LINE AND REPLACE IT WITH PREDEFIEND.
 
-  dbPassLine=$(grep -n '_DB_PASSWD_' config/settings.inc.php | cut -f1 -d:)
+  dbPassLine=$( grep -n '_DB_PASSWD_' config/settings.inc.php | cut -f1 -d: )
   defaultDbLine="define('_DB_PASSWD_', '4eYJEq3KyZr5r1');"
 
   sed -e "${dbPassLine}d" -i config/settings.inc.php
@@ -412,7 +459,7 @@ elif [ $application = 'PrestaShop1.6' ]; then
 
 #VII PRESTASHOP 1.7 SPECIFIC STEPS:
 
-elif [ $application = 'PrestaShop1.7' ]; then
+elif [ "$application" = 'PrestaShop1.7' ]; then
 
 #10.GET OLD DATABASE DETAILS:
 
@@ -432,13 +479,15 @@ elif [ $application = 'PrestaShop1.7' ]; then
 
 #11.3.DELETE DB_PASS LINE AND REPLACE IT WITH PREDEFIEND.
 
-  dbPassLine=$(grep -n 'database_password' app/config/parameters.php | cut -f1 -d:)
+  dbPassLine=$( grep -n 'database_password' app/config/parameters.php | cut -f1 -d: )
   defaultDbLine="    'database_password' => '4eYJEq3KyZr5r1',"
 
   sed -e "${dbPassLine}d" -i app/config/parameters.php
   sed -i "${dbPassLine}i\\$defaultDbLine" app/config/parameters.php
 
 else
+
+  application='Other'
 
   printf "$RED_COLOR" 'APPLICATION IS NOT RECOGNIZED. CONFIGURATION FILE NEEDS TO BE EDITED MANUALLY.'
   printf "$PURPLE_COLOR" 'DATABASE DETAILS:'
@@ -450,27 +499,32 @@ fi
 
 #12.SEARCH FOR DATABASE DUMPS IN CURRENT DIRECTORY AND ASK WHICH DUMP TO IMPORT IF MORE THAN ONE:
 
-find ./* -maxdepth 0 -name '*.sql' > temp.txt
+read -r -a sql_files <<< "$(find ./* -maxdepth 0 -name '*.sql' | cut -d '/' -f 2- | tr '\n' ' ')"
 
-numberOfLines=$(wc -l < temp.txt)
+number_of_sql_files=${#sql_files[@]}
 
-if [ "$numberOfLines" = 1 ]; then
+if [ "$number_of_sql_files" -eq 1 ]; then
 
-  dbDump=$(cat temp.txt)
+  dbDump=${sql_files[0]}
 
-elif [ "$numberOfLines" = 0 ]; then
+elif [ "$number_of_sql_files" -eq 0 ]; then
 
   printf "$RED_COLOR" 'NO SQL FILE FOUND IN CURRENT DIRECTORY. DATABASE NEEDS TO BE IMPORTED MANUALLY!'
-  printf "$PURPLE_COLOR" 'DATABASE DETAILS:'
-  printf "$PURPLE_COLOR" "DATABASE NAME: $db_name"
-  printf "$PURPLE_COLOR" "DATABASE USER: $db_name"
-  printf "$PURPLE_COLOR" "DATABASE PASS: $dbPass"
+
+  if [ "$application" != 'Other' ]; then
+
+    printf "$PURPLE_COLOR" 'DATABASE DETAILS:'
+    printf "$PURPLE_COLOR" "DATABASE NAME: $db_name"
+    printf "$PURPLE_COLOR" "DATABASE USER: $db_name"
+    printf "$PURPLE_COLOR" "DATABASE PASS: $dbPass"
+
+  fi
 
 else
 
-  cat temp.txt
-
   printf "$RED_COLOR" 'MORE THAN ONE SQL FILE FOUND!'
+  printf '%s\n' "${sql_files[@]}"
+
   read -e -r -p $'\e[36mTYPE THE NAME OF THE FILE TO IMPORT:\e[0m ' dbDump;
 
 #12.1.CHECK IF SQL FILE EXISTS AND ASK FOR INPUT UNTIL EXISTING SQL FILE IS PROVIDED:
@@ -481,43 +535,46 @@ else
     read -e -r -p $'\e[36mTYPE THE NAME OF THE FILE AGAIN:\e[0m ' dbDump;
 
   done
-
 fi
 
 #13.CHECK IF CREATE DATABASE LINE EXISTS AND REMOVE IT:
 
-if [ "$numberOfLines" != 0 ]; then
+if [ "$number_of_sql_files" != 0 ]; then
   if grep -q 'CREATE DATABASE' "$dbDump"; then
 
-    line=$(grep -nm1 'CREATE DATABASE' "$dbDump" | cut -d '\:' -f 1)
-    line2=$((line+1))
-    sed -i.bk -e "${line},${line2}d" "$dbDump"
+    create_db_line_num=$( grep -nm1 'CREATE DATABASE' "$dbDump" | cut -d ':' -f 1 )
+    use_line_num=$((create_db_line_num+1))
+    use_line_value=$(sed "${use_line_num}q;d" "$dbDump")
+
+    if echo "$use_line_value" | grep -q 'USE' ; then
+
+      sed -i.bk -e "${create_db_line_num},${use_line_num}d" "$dbDump"
+
+    else
+
+      sed -i.bk -e "${create_db_line_num}d" "$dbDump"
+
+    fi
   fi
 fi
 
 #14.IMPORT DATABASE AND SHOW IF DATABASE HAS BEEN IMPORTED SUCCESSFULLY:
 
- ImportErrors=1
-
-if [ "$numberOfLines" != 0 ]; then
+if [ "$number_of_sql_files" != 0 ]; then
 
   printf "$YELLOW_COLOR" 'IMPORTING DATABASE.'
 
-  mysql -u "$db_name" -p"$dbPass" "$db_name" < "$dbDump" 2>&1 | grep -v 'Warning: Using a password' > temp.txt
+  import_error=$( mysql -u "$db_name" -p"$dbPass" "$db_name" < "$dbDump" 2>&1 | grep -v 'Warning: Using a password' )
 
-  ImportErrors=$(wc -l temp.txt | cut -d ' ' -f 1 )
+  if [ -z "$import_error" ]; then
 
-  if [ "$ImportErrors" -eq 0 ]; then
-
-   printf "$GREEN_COLOR" 'DATABASE IMPORTED.'
+    printf "$GREEN_COLOR" 'DATABASE IMPORTED.'
 
   else
 
-   printf "$RED_COLOR" 'DATABASE WAS NOT IMPORTED SUCCESSFULLY DUE TO THE FOLLOWING ERROR:'
-
-   cat temp.txt
-
-   printf "$RED_COLOR" 'DATABASE NEEDS TO BE IMPORTED MANUALLY!'
+    printf "$RED_COLOR" 'DATABASE WAS NOT IMPORTED SUCCESSFULLY DUE TO THE FOLLOWING ERROR:'
+    printf "$RED_COLOR" "$import_error"
+    printf "$RED_COLOR" 'DATABASE NEEDS TO BE IMPORTED MANUALLY!'
 
   fi
 fi
@@ -526,7 +583,7 @@ fi
 
 printf "$YELLOW_COLOR" 'FIXING PERMISSIONS.'
 
-find . -type d -exec chmod 755 {} \; && find . -type f -exec chmod 644 {} \;
+find . -type d -print0 | xargs -0 chmod 0755 && find . -type f -print0 | xargs -0 chmod 0644
 
 if [ -f bin/magento ]; then
 
@@ -558,15 +615,18 @@ fi
 
 #17.CHECK IF CURRENT DOMAIN IN DATABASE IS DIFFERENT FROM INPUT DOMAIN AND ASK IF SEARCH AND REPLACE SHOULD BE PERFORMED:
 
+replaceDb="n"
+wwwInputDomain=www."$input_domain"
+
 #I.WORDPRESS SPECIFIC STEPS:
 
 #17.1.CHECK IF WP CLI IS WORKING:
 
-if [ $application = 'WordPress' ]; then
+if [ "$application" = 'WordPress' ] && [ "$number_of_sql_files" != 0 ] && [ -z "$import_error" ] ; then
 
   tablePrefix=$( < wp-config.php grep -m 1 table_prefix | cut -d \' -f 2 )
   tablePrefixCLI=$(wp db prefix)
-  wpCliWorking="y"
+  wpCliWorking='y'
 
   if [ "$tablePrefix" != "$tablePrefixCLI" ]; then
 
@@ -575,13 +635,18 @@ if [ $application = 'WordPress' ]; then
 
   fi
 fi
-replaceDb="n"
-wwwInputDomain=www."$input_domain"
 
 #17.2.CHECK IF SQL FILE WAS FOUND AND IF DB WAS SUCCESSFULLY IMPORTED:
-if [ "$numberOfLines" != 0 ] && [ "$ImportErrors" -eq 0 ] && [ $application = 'WordPress' ] && [ $wpCliWorking = 'y' ]; then
+if [ "$application" = 'WordPress' ] && [ "$number_of_sql_files" != 0 ] && [ -z "$import_error" ] && [ "$wpCliWorking" = 'y' ]; then
 
-   oldDomain=$(wp option get siteurl | cut -d '/' -f 3-)
+   oldDomain=$( wp option get siteurl | cut -d '/' -f 3- )
+   old_domain_www=$( echo "$oldDomain" | cut -d '.' -f 1)
+
+  if [ "$old_domain_www" = 'www' ]; then
+
+    input_domain=$wwwInputDomain
+
+  fi
 
 #17.3.CHECK IF INPUT DOMAIN MATCHES THE DOMAIN IN THE DATABASE:
   if [ "$input_domain" != "$oldDomain" ] && [ "$wwwInputDomain" != "$oldDomain" ] && [ ! -z "$oldDomain" ]; then
@@ -589,11 +654,13 @@ if [ "$numberOfLines" != 0 ] && [ "$ImportErrors" -eq 0 ] && [ $application = 'W
      printf "$RED_COLOR" "OLD DOMAIN: $oldDomain IS DIFFERENT FROM CURRENT DOMAIN: $input_domain!"
      read -e -r -p $'\e[36mWould you like to perform search and replace? (y/n):\e[0m ' replaceDb;
 
+     replaceDb="${replaceDb,,}"
+
     if [ "$replaceDb" = 'y' ]; then
 
        printf "$YELLOW_COLOR" 'PERFORMING SEARCH AND REPLACE.'
 
-       replace=$(wp search-replace "$oldDomain" "$input_domain" | grep Success: | cut -d ' ' -f 3)
+       replace=$( wp search-replace "$oldDomain" "$input_domain" | grep Success: | cut -d ' ' -f 3 )
 
       if [ ! -z "$replace" ]; then
 
@@ -615,23 +682,30 @@ fi
 
 # II.OPENCART SPECIFIC STEPS:
 
-replaceDb='n'
-wwwInputDomain=www."$input_domain"
-
 # 17.1.CHECK IF SQL FILE WAS FOUND AND IF DB WAS SUCCESSFULLY IMPORTED:
 
-if [ "$numberOfLines" != 0 ] && [ "$ImportErrors" -eq 0 ] && [ $application = 'OpenCart' ]; then
+if [ "$number_of_sql_files" != 0 ] && [ -z "$import_error" ] && [ "$application" = 'OpenCart' ]; then
 
 oldDomain=$( < config.php grep HTTP_SERVER | cut -d '/' -f 3- | rev | cut -d '/' -f 2- | rev )
+
+old_domain_www=$( echo "$oldDomain" | cut -d '.' -f 1)
+
+  if [ "$old_domain_www" = 'www' ]; then
+
+   input_domain=$wwwInputDomain
+
+  fi
 
   if [ "$input_domain" != "$oldDomain" ] && [ "$wwwInputDomain" != "$oldDomain" ] && [ ! -z "$oldDomain" ]; then
 
 #17.3.CHECK IF INPUT DOMAIN MATCHES THE DOMAIN IN THE CONFIG FILE:
 
-printf "$RED_COLOR" "OLD DOMAIN: $oldDomain IS DIFFERENT FROM CURRENT DOMAIN: $input_domain!"
-     read -e -r -p $'\e[36mWould you like for the Domain value in the config files to be replaced? (y/n):\e[0m ' replaceDb;
+    printf "$RED_COLOR" "OLD DOMAIN: $oldDomain IS DIFFERENT FROM CURRENT DOMAIN: $input_domain!"
+    read -e -r -p $'\e[36mWould you like for the Domain value in the config files to be replaced? (y/n):\e[0m ' replaceDb;
 
-    if [ "$replaceDb" = "y" ]; then
+    replaceDb="${replaceDb,,}"
+
+    if [ "$replaceDb" = 'y' ]; then
 
 	  oldURL=${oldDomain//\//\\/}
 	  newURl=${input_domain//\//\\/}
@@ -713,9 +787,11 @@ printf "$GREEN_COLOR" 'THE DEPLOYMENT OF THE WEBSITE HAS BEEN COMPLETED.'
 
 read -e -r -p $'\e[36mDELETE SCRIPT AND TEMPORARY FILES?(y/n):\e[0m ' delete;
 
+delete="${delete,,}"
+
 if [ "$delete" = 'y' ]; then
 
-  rm -rf transfer.sh temp.txt template.txt
+  rm -rf transfer.sh template.txt
 
   printf "$GREEN_COLOR" 'TEMPORARY FILES REMOVED.'
 
