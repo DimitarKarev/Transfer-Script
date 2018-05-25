@@ -49,7 +49,12 @@ while [ -z "$doc_root" ]; do
   if [ "$current_user" = 'root' ]; then
 
     cpanel_user=$( /scripts/whoowns "$input_domain" )
-    doc_root=$( uapi --user="$cpanel_user"  DomainInfo single_domain_data domain="$domain_name" | grep 'documentroot:' | cut -d ' ' -f 6 )
+
+    if [ ! -z "$cpanel_user" ]; then
+
+      doc_root=$( uapi --user="$cpanel_user"  DomainInfo single_domain_data domain="$domain_name" | grep 'documentroot:' | cut -d ' ' -f 6 )
+
+    fi
 
   else
 
@@ -124,7 +129,6 @@ while [ "$db_name_status" -eq 0 ]; do
 #5.1 GET DATABASE NAME PREFIX:
 
   db_prefix_length=$((db_prefix_length+1))
-
   db_prefix_value=$( echo "$domain_name" | cut -c 1-"$db_prefix_length" )
 
 #5.2 REMOVE ALL INSTANCES OF '.' IN DATABASE NAME:
@@ -202,7 +206,7 @@ if [ "$application" = 'WordPress' ]; then
   sed -e "${db_pass_line}d" -i wp-config.php
   sed -i "${db_pass_line}i\\$default_db_line" wp-config.php
 
-#FIX PATHS IN wp-config.php, wordfence-waf.php, .user.ini AND .htaccess FILES:
+#8.4 FIX PATHS IN wp-config.php, wordfence-waf.php, .user.ini AND .htaccess FILES:
 
   old_doc_root=$( < wp-config.php grep -m 1 WPCACHEHOME | sed 's/wp-content.*$/wp-content/' | rev | cut -d '/' -f2- | rev | cut -d \' -f 4 | sed 's_/_\\/_g' )
   new_doc_root=${doc_root//\//\\/}
@@ -231,18 +235,18 @@ if [ "$application" = 'WordPress' ]; then
 
     fi
 
-	  if [ ! -z "$old_doc_root" ]; then
+    if [ ! -z "$old_doc_root" ]; then
 
 	  sed -i "s/$old_doc_root/$new_doc_root/g" .user.ini
 
-	  fi
+    fi
   fi
 
   if [ -f .htaccess ]; then
 
     cp .htaccess .htaccess.bk
 
-    old_path=$( < .htaccess grep -m 1 RewriteBase | cut -d ' ' -f 2 | sed 's_/_\\/_g' )
+    old_path=$( < .htaccess grep -m 1 RewriteBase | sed 's/^ *//' | cut -d ' ' -f 2 | sed 's_/_\\/_g' )
 
     if [ -z "$sub_folder" ]; then
 
@@ -495,7 +499,7 @@ else
 
 fi
 
-#12.SEARCH FOR DATABASE DUMPS IN CURRENT DIRECTORY AND ASK WHICH DUMP TO IMPORT IF MORE THAN ONE:
+#9.SEARCH FOR DATABASE DUMPS IN CURRENT DIRECTORY AND ASK WHICH DUMP TO IMPORT IF MORE THAN ONE:
 
 read -r -a sql_files <<< "$(find ./* -maxdepth 0 -name '*.sql' | cut -d '/' -f 2- | tr '\n' ' ')"
 
@@ -523,22 +527,22 @@ else
   printf "%sMORE THAN ONE SQL FILE FOUND!%s\\n" "$RED_COLOR" "$DEFAULT_COLOR"
   printf "%s\\n" "${sql_files[@]}"
 
-#12.1.CHECK IF SQL FILE EXISTS AND ASK FOR INPUT UNTIL EXISTING SQL FILE IS PROVIDED:
+#9.1.CHECK IF SQL FILE EXISTS AND ASK FOR INPUT UNTIL EXISTING SQL FILE IS PROVIDED:
 
   while [ ! -f "$db_dump" ]; do
 
-  if [ ! -z "$db_dump" ]; then
+    if [ ! -z "$db_dump" ]; then
 
-    printf "%sINVALID SQL FILE!%s\\n" "$RED_COLOR" "$DEFAULT_COLOR"
+      printf "%sINVALID SQL FILE!%s\\n" "$RED_COLOR" "$DEFAULT_COLOR"
 
-  fi
+    fi
 
     read -e -r -p $'\e[36mTYPE THE NAME OF THE SQL FILE:\e[0m ' db_dump;
 
   done
 fi
 
-#13.CHECK IF CREATE DATABASE LINE EXISTS AND REMOVE IT:
+#10.CHECK IF CREATE DATABASE LINE EXISTS AND REMOVE IT:
 
 if [ "$number_of_sql_files" != 0 ]; then
   if grep -q 'CREATE DATABASE' "$db_dump"; then
@@ -559,7 +563,7 @@ if [ "$number_of_sql_files" != 0 ]; then
   fi
 fi
 
-#14.IMPORT DATABASE AND SHOW IF DATABASE HAS BEEN IMPORTED SUCCESSFULLY:
+#10.IMPORT DATABASE AND SHOW IF DATABASE HAS BEEN IMPORTED SUCCESSFULLY:
 
 if [ "$number_of_sql_files" != 0 ]; then
 
@@ -580,7 +584,7 @@ if [ "$number_of_sql_files" != 0 ]; then
   fi
 fi
 
-#15.FIX PERMISSIONS AND PRINT WHEN PERMISSIONS ARE FIXED:
+#11.FIX PERMISSIONS AND PRINT WHEN PERMISSIONS ARE FIXED:
 
 printf "%sFIXING PERMISSIONS.%s\\n" "$YELLOW_COLOR" "$DEFAULT_COLOR"
 
@@ -594,7 +598,7 @@ fi
 
 printf "%sPERMISSIONS FIXED.%s\\n" "$GREEN_COLOR" "$DEFAULT_COLOR"
 
-#16.MOVE FILES TO ROOT DIRECTORY OF THE DOMAIN AND SHOW WHERE THE FILES WERE MOVED:
+#12.MOVE FILES TO ROOT DIRECTORY OF THE DOMAIN AND SHOW WHERE THE FILES WERE MOVED:
 
 currentPath=$(pwd)
 
@@ -614,14 +618,13 @@ if [ "$currentPath" != "$doc_root" ]; then
 
 fi
 
-#17.CHECK IF CURRENT DOMAIN IN DATABASE IS DIFFERENT FROM INPUT DOMAIN AND ASK IF SEARCH AND REPLACE SHOULD BE PERFORMED:
+#13.CHECK IF CURRENT DOMAIN IN DATABASE IS DIFFERENT FROM INPUT DOMAIN AND ASK IF SEARCH AND REPLACE SHOULD BE PERFORMED:
 
-replace_db="n"
 www_input_domain=www."$input_domain"
 
 #I.WORDPRESS SPECIFIC STEPS:
 
-#17.1. CHECK IF WP CLI IS INSTALLED AND INSTALL IT IF NEEDED:
+#13.1. CHECK IF WP CLI IS INSTALLED AND INSTALL IT IF NEEDED:
 
 if [ "$application" = 'WordPress' ] && [ "$current_user" = 'root' ] && [ ! -f /user/local/bin/wp ]; then
 
@@ -634,12 +637,22 @@ if [ "$application" = 'WordPress' ] && [ "$current_user" = 'root' ] && [ ! -f /u
   fi
 fi
 
-#17.2.CHECK IF WP CLI IS WORKING:
+#13.2.CHECK IF WP CLI IS WORKING:
 
 if [ "$application" = 'WordPress' ] && [ "$number_of_sql_files" != 0 ] && [ -z "$import_error" ] ; then
 
   db_table_prefix=$( < wp-config.php grep -m 1 table_prefix | cut -d \' -f 2 )
-  db_table_prefix_cli=$(wp db prefix)
+
+  if [ "$current_user" = 'root' ]; then
+
+    db_table_prefix_cli=$(wp db prefix --allow-root)
+
+  else
+
+    db_table_prefix_cli=$(wp db prefix)
+
+  fi
+
   wp_cli_working='yes'
 
   if [ "$db_table_prefix" != "$db_table_prefix_cli" ]; then
@@ -650,11 +663,20 @@ if [ "$application" = 'WordPress' ] && [ "$number_of_sql_files" != 0 ] && [ -z "
   fi
 fi
 
-#17.3.CHECK IF SQL FILE WAS FOUND AND IF DB WAS SUCCESSFULLY IMPORTED:
+#13.3.CHECK IF SQL FILE WAS FOUND AND IF DB WAS SUCCESSFULLY IMPORTED:
 if [ "$application" = 'WordPress' ] && [ "$number_of_sql_files" != 0 ] && [ -z "$import_error" ] && [ "$wp_cli_working" = 'yes' ]; then
 
-   old_domain=$( wp option get siteurl | cut -d '/' -f 3- )
-   old_domain_www=$( echo "$old_domain" | cut -d '.' -f 1)
+  if [ "$current_user" = 'root' ]; then
+
+    old_domain=$( wp option get siteurl --allow-root | cut -d '/' -f 3- )
+
+  else
+
+    old_domain=$( wp option get siteurl | cut -d '/' -f 3- )
+
+  fi
+
+  old_domain_www=$( echo "$old_domain" | cut -d '.' -f 1)
 
   if [ "$old_domain_www" = 'www' ]; then
 
@@ -662,7 +684,7 @@ if [ "$application" = 'WordPress' ] && [ "$number_of_sql_files" != 0 ] && [ -z "
 
   fi
 
-#17.4.CHECK IF INPUT DOMAIN MATCHES THE DOMAIN IN THE DATABASE:
+#13.4.CHECK IF INPUT DOMAIN MATCHES THE DOMAIN IN THE DATABASE:
   if [ "$input_domain" != "$old_domain" ] && [ "$www_input_domain" != "$old_domain" ] && [ ! -z "$old_domain" ]; then
 
     printf "%sOLD DOMAIN: %s IS DIFFERENT FROM CURRENT DOMAIN: %s!%s\\n" "$RED_COLOR" "$old_domain" "$input_domain" "$DEFAULT_COLOR"
@@ -679,15 +701,25 @@ if [ "$application" = 'WordPress' ] && [ "$number_of_sql_files" != 0 ] && [ -z "
 
        printf "%sPERFORMING SEARCH AND REPLACE.%s\\n" "$YELLOW_COLOR" "$DEFAULT_COLOR"
 
-       replace=$( wp search-replace "$old_domain" "$input_domain" | grep Success: | cut -d ' ' -f 3 )
+       if [ "$current_user" = 'root' ]; then
+
+         replace=$( wp search-replace "$old_domain" "$input_domain" --allow-root | grep Success: | cut -d ' ' -f 3 )
+
+       else
+
+         replace=$( wp search-replace "$old_domain" "$input_domain" | grep Success: | cut -d ' ' -f 3 )
+
+       fi
+
+      sed -i "s/$old_domain\\b/$input_domain/g" wp-config.php
 
       if [ ! -z "$replace" ]; then
 
         printf "%sSEARCH AND REPLACE SUCCESSFULLY COMPLETED. %s REPLACEMENTS WERE MADE.%s\\n" "$GREEN_COLOR" "$replace" "$DEFAULT_COLOR"
 
-	  else
+	    else
 
-	   printf "%sSEARCH AND REPLACE WAS NOT SUCCESSFULLY COMPLETED!%s\\n" "$RED_COLOR" "$DEFAULT_COLOR"
+	        printf "%sSEARCH AND REPLACE WAS NOT SUCCESSFULLY COMPLETED!%s\\n" "$RED_COLOR" "$DEFAULT_COLOR"
 
       fi
 
@@ -701,7 +733,7 @@ fi
 
 # II.OPENCART SPECIFIC STEPS:
 
-# 17.1.CHECK IF SQL FILE WAS FOUND AND IF DB WAS SUCCESSFULLY IMPORTED:
+# 13.1.CHECK IF SQL FILE WAS FOUND AND IF DB WAS SUCCESSFULLY IMPORTED:
 
 if [ "$number_of_sql_files" != 0 ] && [ -z "$import_error" ] && [ "$application" = 'OpenCart' ]; then
 
@@ -717,12 +749,17 @@ old_domain_www=$( echo "$old_domain" | cut -d '.' -f 1)
 
   if [ "$input_domain" != "$old_domain" ] && [ "$www_input_domain" != "$old_domain" ] && [ ! -z "$old_domain" ]; then
 
-#17.3.CHECK IF INPUT DOMAIN MATCHES THE DOMAIN IN THE CONFIG FILE:
+#13.3.CHECK IF INPUT DOMAIN MATCHES THE DOMAIN IN THE CONFIG FILE:
 
     printf "%sOLD DOMAIN: %s IS DIFFERENT FROM CURRENT DOMAIN: %s!%s\\n" "$RED_COLOR" "$old_domain" "$input_domain" "$DEFAULT_COLOR"
-    read -e -r -p $'\e[36mWould you like for the Domain value in the config files to be replaced? (y/n):\e[0m ' replace_db;
 
-    replace_db="${replace_db,,}"
+    while [[ "$replace_db" != 'y' && "$replace_db" != 'n' ]]; do
+
+      read -e -r -p $'\e[36mWould you like for the Domain value in the config files to be replaced? (y/n):\e[0m ' replace_db;
+
+      replace_db="${replace_db,,}"
+
+    done
 
     if [ "$replace_db" = 'y' ]; then
 
@@ -752,12 +789,12 @@ old_domain_www=$( echo "$old_domain" | cut -d '.' -f 1)
   fi
 fi
 
-#18.GET SERVER HOSTNAME AND IP_ADDRESS:
+#14.GET SERVER HOSTNAME AND IP_ADDRESS:
 
 ip_address=$(/bin/hostname -i)
 hostname=$(/bin/hostname)
 
-#19.WGET PROPAGATION AND TEMPLATE FILES:
+#15.WGET PROPAGATION AND TEMPLATE FILES:
 
 wget -q https://files.wowmania.net/propagation.txt && chmod 644 propagation.txt
 
@@ -781,7 +818,7 @@ else
 
 fi
 
-# FIX OWNERSHIP:
+#16 FIX OWNERSHIP:
 
 if [ "$current_user" = 'root' ]; then
 
@@ -789,7 +826,7 @@ if [ "$current_user" = 'root' ]; then
 
 fi
 
-#20. PRINT HOSTS FILE LINE, PROPAGATION AND REPLY TEMPLATE LINKS:
+#17. PRINT HOSTS FILE LINE, PROPAGATION AND REPLY TEMPLATE LINKS:
 
 printf "%sHOSTS FILE LINE:%s\\n" "$CYAN_COLOR" "$DEFAULT_COLOR"
 printf "%s%s %s www.%s%s\\n" "$PURPLE_COLOR" "$ip_address" "$domain_name" "$domain_name" "$DEFAULT_COLOR"
@@ -801,7 +838,7 @@ if [ -f propagation.txt ] && [ -f template.txt ]; then
 
   replace_old_domain=${old_domain//\//\\/}
   replace_input_domain=${input_domain//\//\\/}
-  sed -i "s/old_url/$replace_old_domain/g;s/new_url/$replace_input_domain/g;s/DOMAIN/$domain_name/g;s/HOSTNAME/$hostname/g;s/IP_ADDRESS/$ip_address/g" template.txt
+  sed -i "s/OLDURL/$replace_old_domain/g;s/NEWURL/$replace_input_domain/g;s/DOMAIN/$domain_name/g;s/HOSTNAME/$hostname/g;s/IP_ADDRESS/$ip_address/g" template.txt
 
   printf "%sLINK TO TEMPLATE:%s\\n" "$CYAN_COLOR" "$DEFAULT_COLOR"
   printf "%s%s/template.txt%s\\n" "$PURPLE_COLOR" "$input_domain" "$DEFAULT_COLOR"
@@ -810,7 +847,7 @@ fi
 
 printf "%sTHE DEPLOYMENT OF THE WEBSITE HAS BEEN COMPLETED.%s\\n" "$GREEN_COLOR" "$DEFAULT_COLOR"
 
-#21.DELETE TEMPORARY FILES:
+#18.DELETE TEMPORARY FILES:
 
 while [[ "$delete" != 'y' && "$delete" != 'n' ]]; do
 
